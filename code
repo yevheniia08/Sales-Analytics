@@ -1,0 +1,175 @@
+WITH
+  message_account_data AS (
+  SELECT -- агрегую дані
+    date,
+    country,
+    send_interval,
+    is_verified,
+    is_unsubscribed,
+    SUM(account_cnt) AS account_cnt,
+    SUM(sent_msg_cnt) AS sent_msg_cnt,
+    SUM(open_msg_cnt) AS open_msg_cnt,
+    SUM(visit_msg_cnt) AS visit_msg_cnt
+  FROM (
+    SELECT
+      -- рахую клькість аккаунтів у розрізі дати, країни,інтервалу і підписки
+      s.date AS date,
+      sp.country AS country,
+      acc.send_interval AS send_interval,
+      acc.is_verified AS is_verified,
+      acc.is_unsubscribed AS is_unsubscribed,
+      COUNT(DISTINCT acc.id) AS account_cnt,
+      0 AS sent_msg_cnt,
+      0 AS open_msg_cnt,
+      0 AS visit_msg_cnt
+    FROM
+      `data-analytics-mate.DA.account` acc
+    JOIN
+      `data-analytics-mate.DA.account_session` acs
+    ON
+      acc.id = acs.account_id
+    JOIN
+      `data-analytics-mate.DA.session` s
+    ON
+      acs.ga_session_id = s.ga_session_id
+    JOIN
+      `data-analytics-mate.DA.session_params` sp
+    ON
+      s.ga_session_id = sp.ga_session_id
+    GROUP BY
+      1,
+      2,
+      3,
+      4,
+      5
+    UNION ALL
+    SELECT -- рахую кількість відправлених,відкритих і відвіданих повідомлень у розрізі дати, країни, інтервалу і підписки
+      md.date AS date,
+      sp.country AS country,
+      ac.send_interval AS send_interval,
+      ac.is_verified AS is_verified,
+      ac.is_unsubscribed AS is_unsubscribed,
+      0 AS account_cnt,
+      COUNT(DISTINCT md.sent_msg) AS sent_msg_cnt,
+      COUNT(DISTINCT md.open_msg) AS open_msg_cnt,
+      COUNT(DISTINCT md.visit_msg) AS visit_msg_cnt
+    FROM
+      `data-analytics-mate.Students.message_data_opanasiuk` md -- моя таблиця з інф. про повідомлення
+    JOIN
+      `data-analytics-mate.DA.account` ac
+    ON
+      md.id_account = ac.id
+    JOIN
+      `data-analytics-mate.DA.session_params` sp
+    ON
+      md.ga_session_id = sp.ga_session_id
+    GROUP BY
+      1,
+      2,
+      3,
+      4,
+      5)
+  GROUP BY
+    1,
+    2,
+    3,
+    4,
+    5),
+  rank_country AS (
+  SELECT -- рахую загальну кількість створених аккаунтів і відправлених повідомлень в розрізі країни і ранжую країни
+    country,
+    total_country_account_cnt,
+    total_country_sent_cnt,
+    RANK() OVER(ORDER BY total_country_account_cnt DESC) AS rank_total_country_account_cnt,
+    RANK() OVER(ORDER BY total_country_sent_cnt DESC) AS rank_total_country_sent_cnt
+  FROM (
+    SELECT
+      country,
+      SUM(account_cnt) AS total_country_account_cnt,
+      SUM(sent_msg_cnt) AS total_country_sent_cnt
+    FROM
+      message_account_data
+    GROUP BY
+      country))
+SELECT -- фінальний запит: фільтрую дані відповідно до рангу
+  date,
+  mad.country,
+  send_interval,
+  is_verified,
+  is_unsubscribed,
+  account_cnt,
+  sent_msg_cnt,
+  open_msg_cnt,
+  visit_msg_cnt,
+  total_country_account_cnt,
+  total_country_sent_cnt,
+  rank_total_country_account_cnt,
+  rank_total_country_sent_cnt
+FROM
+  message_account_data mad
+JOIN
+  rank_country rc
+ON
+  mad.country = rc.country
+WHERE
+  rank_total_country_account_cnt <= 10
+  OR rank_total_country_sent_cnt <= 10
+
+
+
+
+
+
+/*CREATE TABLE
+  `data-analytics-mate.Students.message_data_opanasiuk` AS
+WITH
+  total_msg AS (
+  SELECT
+    es.id_account AS id_account,
+    es.id_message AS sent_msg,
+    eo.id_message AS open_msg,
+    ev.id_message AS visit_msg
+  FROM
+    `DA.email_sent` es
+  LEFT JOIN (
+    SELECT
+      DISTINCT id_message
+    FROM
+      `DA.email_open`) eo
+  ON
+    es.id_message = eo.id_message
+  LEFT JOIN (
+    SELECT
+      DISTINCT id_message
+    FROM
+      `DA.email_visit`) ev
+  ON
+    es.id_message = ev.id_message),
+  sent_date AS (
+  SELECT
+    DATE_ADD(s.date, INTERVAL es.sent_date DAY) AS date,
+    es.id_message AS sent_msg,
+    s.ga_session_id AS ga_session_id
+  FROM
+    `data-analytics-mate.DA.email_sent` es
+  JOIN
+    `data-analytics-mate.DA.account_session` acs
+  ON
+    es.id_account = acs.account_id
+  JOIN
+    `data-analytics-mate.DA.session` s
+  ON
+    acs.ga_session_id = s.ga_session_id)
+SELECT
+  tm.id_account,
+  sd.date,
+  sd.ga_session_id,
+  tm.sent_msg,
+  tm.open_msg,
+  tm.visit_msg
+FROM
+  total_msg tm
+JOIN
+  sent_date sd
+ON
+  tm.sent_msg = sd.sent_msg*/
