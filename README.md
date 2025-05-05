@@ -14,7 +14,7 @@ This SQL project focuses on analyzing account creation and messaging behavior ac
 The project involves:
 - Aggregating user activity metrics by country, date, and user attributes  
 - Using **window functions and ranking** to highlight top-performing countries  
-- Creating a custom table `message_data_opanasiuk` with sent, open, and visit message flags  
+- Creating a custom table with sent, open, and visit message flags  
 - Joining account, session, and country-level parameters for enriched analysis
 
 ## Use Cases
